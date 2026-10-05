@@ -1,0 +1,527 @@
+{
+  "name": "Freelancer Job Finder – V1",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyHour"
+            }
+          ]
+        },
+        "simple": false,
+        "maxResults": 50,
+        "filters": {},
+        "options": {}
+      },
+      "id": "f20793e7-33f6-40a4-b0b4-6df7bee44bce",
+      "name": "Gmail Trigger",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        32,
+        16
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "oN5AZMlEzB5Vrk0n",
+          "name": "Gmail account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "96e0e411-e474-43b0-9512-c5aeb4979e24",
+              "leftValue": "={{ $json.text }}",
+              "rightValue": "Freelancer ",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "6f44cb07-d9af-4fcc-97c2-d7bd050b5cf5",
+      "name": "If",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        208,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const emailText = $input.first().json.text || '';\n\nif (!emailText) {\n  return [\n    {\n      json: {\n        error: 'No email text found'\n      }\n    }\n  ];\n}\n\nconst text = emailText\n  .replace(/\\\\n/g, '\\n')\n  .replace(/\\\\r/g, '')\n  .replace(/&amp;/g, '&')\n  .replace(/&#39;/g, \"'\")\n  .replace(/&quot;/g, '\"')\n  .replace(/&nbsp;/g, ' ')\n  .trim();\n\nconst budgetRegex = /Budget:\\s*([^\\n]+)/gi;\nconst budgets = [...text.matchAll(budgetRegex)];\n\nconst projects = [];\n\nfor (let i = 0; i < budgets.length; i++) {\n\n  const budgetMatch = budgets[i];\n\n  const budget = budgetMatch[1].trim();\n\n  const projectStart =\n    i === 0\n      ? 0\n      : budgets[i - 1].index + budgets[i - 1][0].length;\n\n  const projectEnd =\n    i + 1 < budgets.length\n      ? budgets[i + 1].index\n      : text.length;\n\n  let titlePart = text\n    .substring(projectStart, budgetMatch.index)\n    .trim();\n\n  let detailsPart = text\n    .substring(\n      budgetMatch.index + budgetMatch[0].length,\n      projectEnd\n    )\n    .trim();\n\n  // Remove email text before the first project\n  titlePart = titlePart\n    .replace(/^[\\s\\S]*?Projects\\s*/i, '')\n    .trim();\n\n  // -------------------------\n  // TITLE\n  // -------------------------\n\n  const titleLines = titlePart\n    .split('\\n')\n    .map(line => line.trim())\n    .filter(line => line);\n\n  const title = titleLines.length\n    ? titleLines[titleLines.length - 1]\n    : '';\n\n  // -------------------------\n  // SKILLS\n  // -------------------------\n\n  const skillsMatch = detailsPart.match(\n    /Skills:\\s*([\\s\\S]*?)(?=\\s*Description:)/i\n  );\n\n  const skills = skillsMatch\n    ? skillsMatch[1].trim()\n    : '';\n\n  // -------------------------\n  // DESCRIPTION\n  // -------------------------\n\n  const descriptionMatch = detailsPart.match(\n    /Description:\\s*([\\s\\S]*?)(?=\\s*(?:https?:\\/\\/|\\/projects\\/|See more|$))/i\n  );\n\n  const description = descriptionMatch\n    ? descriptionMatch[1].trim()\n    : '';\n\n  // -------------------------\n  // PROJECT URL\n  // -------------------------\n\n  let url = '';\n\n  const fullUrlMatch = detailsPart.match(\n    /https?:\\/\\/(?:www\\.)?freelancer\\.com\\/projects\\/[^\\s<>\"\\\\]+/i\n  );\n\n  if (fullUrlMatch) {\n    url = fullUrlMatch[0];\n  } else {\n\n    const relativeUrlMatch = detailsPart.match(\n      /\\/projects\\/[^\\s<>\"\\\\]+/i\n    );\n\n    if (relativeUrlMatch) {\n      url = 'https://www.freelancer.com' + relativeUrlMatch[0];\n    }\n  }\n\n  // Remove tracking parameters\n  url = url.split('?')[0];\n\n  // Remove trailing characters\n  url = url.replace(/[),>\"']+$/, '');\n\n  // -------------------------\n  // ADD PROJECT\n  // -------------------------\n\n  if (title) {\n    projects.push({\n      title,\n      budget,\n      skills,\n      description,\n      url\n    });\n  }\n}\n\nreturn projects.map(project => ({\n  json: project\n}));"
+      },
+      "id": "272cdc45-6e66-47a4-8edc-6804a29ee408",
+      "name": "Code in JavaScript",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        384,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "images": {
+          "values": []
+        },
+        "modelId": {
+          "__rl": true,
+          "value": "=gpt-5.6-luna",
+          "mode": "id"
+        },
+        "responses": {
+          "values": [
+            {
+              "content": "=Analyze this Freelancer project for our shared Freelancer account.\n\nPROJECT:\n\nTITLE:\n{{ $json.title }}\n\nBUDGET:\n{{ $json.budget }}\n\nSKILLS:\n{{ $json.skills }}\n\nDESCRIPTION:\n{{ $json.description }}\n\nPROJECT URL:\n{{ $json.url }}\n\n\nIMPORTANT:\nThis Freelancer account is shared by two people. We can take projects using the combined skills of both people.\n\nPERSON 1 — Automation / AI / Python Skills:\n- Python\n- JavaScript\n- n8n\n- Workflow Automation\n- AI Automation\n- API Integration\n- Webhooks\n- Lead Management\n- Google Sheets\n- Google Forms\n- Brevo\n- Email Automation\n- WhatsApp Automation\n- Supabase\n- Next.js\n- HTML\n- CSS\n- Data Processing\n- Basic Data Analysis\n- Basic SQL\n\nPERSON 2 — Web Development / ML Skills:\n- React\n- Next.js\n- MySQL\n- PostgreSQL\n- Machine Learning (ML)\n- HTML\n- CSS\n- JavaScript\n- PHP\n- MongoDB\n\n\nYOUR TASK:\n\nAnalyze whether this project is suitable for our shared account.\n\nConsider a project a good match if:\n1. It matches the skills of either Person 1 OR Person 2.\n2. It matches the combined skills of both people.\n3. The required technology can realistically be handled by one of us based on the skills listed above.\n4. Projects involving automation, AI, Python, JavaScript, APIs, web development, React, Next.js, databases, PHP, ML, data processing, or related technologies should be considered.\n5. Do not reject a project simply because one person does not have the required skill if the other person has it.\n6. If the project requires a completely unrelated specialized technology or skill, reduce the score accordingly.\n7. Distinguish between a project that is a strong match and one where we only have partial skills.\n\n\nReturn ONLY valid JSON in exactly this format:\n\n{\n  \"title\": \"\",\n  \"budget\": \"\",\n  \"skills\": \"\",\n  \"description\": \"\",\n  \"url\": \"\",\n  \"match_score\": 0,\n  \"should_apply\": false,\n  \"matched_skills\": [],\n  \"missing_skills\": [],\n  \"responsible_person\": \"\",\n  \"reason\": \"\",\n  \"project_type\": \"\"\n}\n\nRULES:\n\n- match_score must be an integer from 0 to 100.\n- should_apply must be true only when match_score is 70 or higher.\n- matched_skills must list the relevant project skills that match either person's skills.\n- missing_skills must list important required skills that neither person currently has.\n- responsible_person must be either \"Person 1\", \"Person 2\", or \"Both\".\n- reason must briefly explain why the project is or is not suitable.\n- project_type should be something like Automation, AI, Machine Learning, Web Development, Full Stack, Mobile App, Data Analysis, Backend, etc.\n- Do not add Markdown.\n- Do not add ``` around the JSON.\n- Return nothing except the JSON.\nCopy the project's title, budget, skills, description, and URL exactly from the input into the corresponding JSON fields.\nDo not modify or summarize these five fields."
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "id": "37d2e892-6c21-461d-8ef2-129c6fdaff47",
+      "name": "Message a model",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.3,
+      "position": [
+        560,
+        -80
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "4CJyZpaS7W37SMgy",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nconst results = [];\n\nfor (const item of items) {\n  const output = item.json.output?.[0]?.content?.[0]?.text;\n\n  if (!output) {\n    continue;\n  }\n\n  try {\n    const result = JSON.parse(output);\n\n    results.push({\n      json: result\n    });\n  } catch (error) {\n    results.push({\n      json: {\n        error: \"Failed to parse AI response\",\n        raw_output: output\n      }\n    });\n  }\n}\n\nreturn results;"
+      },
+      "id": "3ae55b56-861e-46a0-bec9-4b057453b146",
+      "name": "Code in JavaScript1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        736,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "31fb7ba5-683c-401f-b164-31e73913bf93",
+              "leftValue": "={{ $json.match_score }}",
+              "rightValue": 60,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b638e9e6-213e-48f8-8f00-aee8fffe5b9a",
+      "name": "If1",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        912,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-5.6-luna",
+          "mode": "list",
+          "cachedResultName": "GPT-5.6-LUNA"
+        },
+        "responses": {
+          "values": [
+            {
+              "content": "=Write a professional, human-sounding Freelancer.com proposal for this project.\n\nPROJECT TITLE:\n{{ $json.title }}\n\nBUDGET:\n{{ $json.budget }}\n\nPROJECT SKILLS:\n{{ $json.skills }}\n\nPROJECT DESCRIPTION:\n{{ $json.description }}\n\nPROJECT URL:\n{{ $json.url }}\n\nMATCH SCORE:\n{{ $json.match_score }}\n\nRESPONSIBLE PERSON:\n{{ $json.responsible_person }}\n\nMATCHED SKILLS:\n{{ $json.matched_skills }}\n\nMISSING SKILLS:\n{{ $json.missing_skills }}\n\nMATCH ANALYSIS:\n{{ $json.reason }}\n\n\nOUR AVAILABLE SKILLS:\n\nPerson 1:\nPython, JavaScript, n8n, Workflow Automation, AI Automation, API Integration, Webhooks, Lead Management, Google Sheets, Google Forms, Brevo, Email Automation, WhatsApp Automation, Supabase, Next.js, HTML, CSS, Data Processing, Basic Data Analysis, Basic SQL.\n\nPerson 2:\nReact, Next.js, MySQL, PostgreSQL, Machine Learning, HTML, CSS, JavaScript, PHP, MongoDB.\n\n\nPROPOSAL RULES:\n\n- Write like a real freelancer, not like an AI.\n- Keep it concise and professional.\n- Start by showing that you understand the client's actual requirement.\n- Mention only skills that are relevant to this project.\n- Do not claim experience, certifications, completed projects, or expertise that was not provided.\n- Do not mention \"Person 1\" or \"Person 2\" in the proposal.\n- Do not mention our internal match score or missing skills.\n- If the project requires a skill we are still learning, do not falsely claim expert experience with it.\n- Explain briefly how we would approach the project.\n- Ask 1–2 useful questions if clarification is needed.\n- Avoid generic phrases such as \"I am excited to apply\".\n- Avoid excessive bullet points.\n- Make the proposal sound natural and personalized to this specific project.\n- Do not use emojis.\n- Keep the proposal around 150–220 words.\n-Do not commit to a technology that is not clearly supported by our listed skills.\n If the client requires a technology we don't currently list as a skill, acknowledge it   through a clarification question rather than claiming expertise.\n-Do not invent previous project experience.\n-Do not say \"I have X years of experience\" unless that information is explicitly provided.\nWhen a project requires a technology that is not in our listed skills:\n- Do not falsely claim experience with it.\n- Do not unnecessarily emphasize the missing skill.\n- If it is an important requirement, ask a concise clarification question.\n- Focus the proposal primarily on the skills and parts of the project that we can genuinely handle.\n- Make the proposal confident but truthful.\nKeep the proposal between 120 and 180 words.\n\nThe proposal should follow this structure:\n1. One short paragraph showing understanding of the project.\n2. One paragraph explaining the relevant technical approach and skills.\n3. One short paragraph with 1–2 important questions.\n4. A simple closing sentence.\n\nDo not over-explain the implementation.\nDo not repeat the client's requirements unnecessarily.\nDo not use headings such as \"Introduction\", \"Approach\", or \"Questions\".\nDo not use bullet points unless they genuinely improve clarity.\nMake it sound like a real freelancer personally wrote it after reading the project.\nReturn ONLY valid JSON in exactly this format:\n\n{\n  \"title\": \"\",\n  \"budget\": \"\",\n  \"url\": \"\",\n  \"match_score\": 0,\n  \"responsible_person\": \"\",\n  \"project_type\": \"\",\n  \"matched_skills\": [],\n  \"missing_skills\": [],\n  \"proposal\": \"\"\n}\n\nRules:\n- Copy title, budget, and URL exactly from the input.\n- Copy match_score, responsible_person, and project_type from the input.\n- Put the complete generated proposal inside \"proposal\".\n- Do not add Markdown.\n- Do not add ``` around the JSON.\n- Return nothing except the JSON.\nCopy matched_skills and missing_skills exactly from the input.\nDo not modify them."
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "id": "12157393-2a47-4835-92a8-63912749d2ee",
+      "name": "Message a model1",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.3,
+      "position": [
+        1088,
+        -176
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "4CJyZpaS7W37SMgy",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nconst results = [];\n\nfor (const item of items) {\n  const output = item.json.output?.[0]?.content?.[0]?.text;\n\n  if (!output) {\n    continue;\n  }\n\n  try {\n    const result = JSON.parse(output);\n\n    results.push({\n      json: result\n    });\n  } catch (error) {\n    results.push({\n      json: {\n        error: \"Failed to parse proposal AI response\",\n        raw_output: output\n      }\n    });\n  }\n}\n\nreturn results;"
+      },
+      "id": "bf9c9f8f-8a53-459d-a925-da1c1b16d81f",
+      "name": "Code in JavaScript2",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1392,
+        -176
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1xV_i-VZQP9uVcTOl3P2Z406me2_c_AqTLIoyMyPVW2g",
+          "mode": "list",
+          "cachedResultName": "Freelancer",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1xV_i-VZQP9uVcTOl3P2Z406me2_c_AqTLIoyMyPVW2g/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1xV_i-VZQP9uVcTOl3P2Z406me2_c_AqTLIoyMyPVW2g/edit#gid=0"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "url",
+              "lookupValue": "={{ $json.url }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "6df3353d-faf4-4322-9cad-32fdb62468fe",
+      "name": "Get row(s) in sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1568,
+        -176
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "3EQqzovZ5sEB8Eob",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// All projects that came from the proposal parser\nconst projects = $('Code in JavaScript2').all().map(item => item.json);\n\n// URLs that were found in Google Sheets\nconst existingUrls = $input.all()\n  .map(item => item.json.URL)\n  .filter(url => url);\n\nconst existingSet = new Set(existingUrls);\n\n// Keep only projects that are NOT already in the sheet\nconst newProjects = projects.filter(project => {\n  return project.url && !existingSet.has(project.url);\n});\n\nreturn newProjects.map(project => ({\n  json: project\n}));"
+      },
+      "id": "1f3f32b4-c565-4c8d-bcca-320575a8e422",
+      "name": "Code in JavaScript3",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1792,
+        -176
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1xV_i-VZQP9uVcTOl3P2Z406me2_c_AqTLIoyMyPVW2g",
+          "mode": "list",
+          "cachedResultName": "Freelancer",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1xV_i-VZQP9uVcTOl3P2Z406me2_c_AqTLIoyMyPVW2g/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1xV_i-VZQP9uVcTOl3P2Z406me2_c_AqTLIoyMyPVW2g/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "title": "={{ $json.title }}",
+            "budget": "={{ $json.budget }}",
+            "url": "={{ $json.url }}",
+            "match_score": "={{ $json.match_score }}",
+            "responsible_person": "={{ $json.responsible_person }}",
+            "project_type": "={{ $json.project_type }}",
+            "matched_skills": "={{ $json.matched_skills.join(', ') }}",
+            "missing_skills": "={{ $json.missing_skills.join(', ') }}",
+            "proposal": "={{ $json.proposal }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "title",
+              "displayName": "title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "budget",
+              "displayName": "budget",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "url",
+              "displayName": "url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "match_score",
+              "displayName": "match_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "responsible_person",
+              "displayName": "responsible_person",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "project_type",
+              "displayName": "project_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "matched_skills",
+              "displayName": "matched_skills",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "missing_skills",
+              "displayName": "missing_skills",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "proposal",
+              "displayName": "proposal",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "1a14a178-60e5-4f7b-8f66-f362c19291d8",
+      "name": "Append row in sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2000,
+        -176
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "3EQqzovZ5sEB8Eob",
+          "name": "Google Sheets account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Gmail Trigger": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "Message a model1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript2": {
+      "main": [
+        [
+          {
+            "node": "Get row(s) in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript3": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "e75823bc-8ea8-490b-a5fa-40b79834138e",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "0c88e4336ffc5a4d9b59b4fb7a052beeaebd84fd994cc218d2118a12078fa2b9"
+  },
+  "nodeGroups": [],
+  "id": "W9XQB7TjZNh0C1H8",
+  "tags": []
+}
